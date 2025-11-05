@@ -183,7 +183,7 @@ resource "google_cloud_run_v2_service" "creative_studio" {
   deletion_protection  = false
   iap_enabled          = !var.use_lb
   invoker_iam_disabled = !var.use_lb
-  launch_stage         = var.use_lb ? "GA" : "BETA"
+  launch_stage         = "BETA"
   labels = {
     app         = "genai-creative-studio"
     environment = "prod"
