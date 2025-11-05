@@ -96,3 +96,9 @@ variable "sleep_time" {
   type        = number
   default     = 45
 }
+
+variable "reserved_ip_address" {
+  description = "Reserved static IP address for the load balancer (optional, will create new if not provided)"
+  type        = string
+  default     = null
+}
