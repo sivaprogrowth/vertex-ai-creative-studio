@@ -102,3 +102,9 @@ variable "reserved_ip_address" {
   type        = string
   default     = null
 }
+
+variable "app_env" {
+  description = "Application environment (local, dev, prod) - controls authentication enforcement"
+  type        = string
+  default     = "local"
+}
