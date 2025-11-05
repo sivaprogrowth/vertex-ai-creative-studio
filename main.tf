@@ -182,8 +182,8 @@ resource "google_cloud_run_v2_service" "creative_studio" {
   ingress              = var.use_lb ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_ALL"
   default_uri_disabled = var.use_lb
   deletion_protection  = false
-  iap_enabled          = !var.use_lb
-  invoker_iam_disabled = !var.use_lb
+  iap_enabled          = var.use_lb
+  invoker_iam_disabled = var.use_lb
   launch_stage         = var.use_lb ? "GA" : "BETA"
   labels = {
     app         = "genai-creative-studio"
