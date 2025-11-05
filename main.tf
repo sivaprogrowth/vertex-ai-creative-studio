@@ -107,6 +107,8 @@ module "lb-http" {
   ssl                             = var.use_lb
   managed_ssl_certificate_domains = [var.domain]
   https_redirect                  = var.use_lb
+  address                         = var.reserved_ip_address
+  create_address                  = var.reserved_ip_address == null
   backends = {
     default = {
       description = "Creative Studio backend"
@@ -182,15 +184,23 @@ resource "google_cloud_run_v2_service" "creative_studio" {
   iap_enabled          = !var.use_lb
   invoker_iam_disabled = !var.use_lb
   launch_stage         = var.use_lb ? "GA" : "BETA"
+  labels = {
+    app         = "genai-creative-studio"
+    environment = "prod"
+    team        = "progrowth"
+    owner       = "siva"
+    cost_center = "marketing"
+  }
 
   template {
+    timeout = "1800s"
     containers {
       name  = "creative-studio"
       image = var.initial_container_image
       resources {
         limits = {
-          cpu    = "1000m"
-          memory = "1024Mi"
+          cpu    = "2000m"
+          memory = "4Gi"
         }
       }
       dynamic "env" {
@@ -201,9 +211,11 @@ resource "google_cloud_run_v2_service" "creative_studio" {
         }
       }
     }
-    service_account = google_service_account.creative_studio.email
+    max_instance_request_concurrency = 4
+    service_account                  = google_service_account.creative_studio.email
     scaling {
-      max_instance_count = 1
+      min_instance_count = 0
+      max_instance_count = 5
     }
   }
   lifecycle {
@@ -237,6 +249,13 @@ resource "google_storage_bucket" "assets" {
   public_access_prevention    = "enforced"
   uniform_bucket_level_access = true
   default_event_based_hold    = false
+  labels = {
+    app         = "genai-creative-studio"
+    environment = "prod"
+    team        = "progrowth"
+    owner       = "siva"
+    cost_center = "marketing"
+  }
   autoclass {
     enabled = false
   }
@@ -245,6 +264,14 @@ resource "google_storage_bucket" "assets" {
     method          = ["GET"]
     response_header = ["Content-Type"]
     max_age_seconds = 3600
+  }
+  lifecycle_rule {
+    condition {
+      age = 90
+    }
+    action {
+      type = "Delete"
+    }
   }
 }
 
@@ -366,6 +393,18 @@ resource "google_project_iam_member" "build_logs_writer" {
   member  = google_service_account.cloudbuild.member
 }
 
+resource "google_project_iam_member" "build_cloudbuild_editor" {
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = google_service_account.cloudbuild.member
+}
+
+resource "google_project_iam_member" "build_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = google_service_account.cloudbuild.member
+}
+
 module "source_bucket" {
   source     = "terraform-google-modules/cloud-storage/google"
   version    = "~>11.0"
@@ -392,6 +431,13 @@ resource "google_artifact_registry_repository" "creative_studio" {
   repository_id = "creative-studio"
   description   = "Docker repository for GenMedia Creative Studio related images"
   format        = "DOCKER"
+  labels = {
+    app         = "genai-creative-studio"
+    environment = "prod"
+    team        = "progrowth"
+    owner       = "siva"
+    cost_center = "marketing"
+  }
   vulnerability_scanning_config {
     enablement_config = "INHERITED"
   }
