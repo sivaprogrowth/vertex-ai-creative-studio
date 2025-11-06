@@ -16,7 +16,7 @@
 
 terraform {
   backend "gcs" {
-    bucket = "genai-studio-mvp-terraform-state"
+    bucket = "genai-creative-studio-terraform-state"
     prefix = "genai-creative-studio/prod"
   }
 }
