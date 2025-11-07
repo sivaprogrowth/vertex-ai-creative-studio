@@ -16,6 +16,7 @@
 import datetime
 import inspect
 import os
+import time
 import uuid
 
 import google.auth
@@ -29,6 +30,8 @@ from fastapi.staticfiles import StaticFiles
 from google.auth import impersonated_credentials
 from google.cloud import storage
 from pydantic import BaseModel
+
+from common.logging_config import configure_logging, get_logger, log_request
 
 import pages.shop_the_look
 from app_factory import app
@@ -76,6 +79,10 @@ class UserInfo(BaseModel):
     email: str | None
     agent: str | None
 
+
+# Configure structured JSON logging for Cloud Logging
+logger = configure_logging()
+app_logger = get_logger(__name__)
 
 # FastAPI server with Mesop
 router = APIRouter()
@@ -185,8 +192,12 @@ async def set_request_context(request: Request, call_next):
     if not session_id:
         session_id = str(uuid.uuid4())
 
+    # Generate request ID for tracing
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+
     request.scope["MESOP_USER_EMAIL"] = user_email
     request.scope["MESOP_SESSION_ID"] = session_id
+    request.scope["MESOP_REQUEST_ID"] = request_id
 
     # Pass GA ID to Mesop context if it exists
     if config.Default.GA_MEASUREMENT_ID:
@@ -197,6 +208,45 @@ async def set_request_context(request: Request, call_next):
         key="session_id", value=session_id, httponly=True, samesite="Lax"
     )
     return response
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Middleware to log HTTP requests with structured data."""
+    start_time = time.time()
+
+    try:
+        response = await call_next(request)
+        response_time_ms = (time.time() - start_time) * 1000
+
+        # Log the request with structured data
+        log_request(
+            app_logger,
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            response_time_ms=response_time_ms,
+            request_id=request.scope.get("MESOP_REQUEST_ID"),
+            user_id=request.scope.get("MESOP_USER_EMAIL"),
+            session_id=request.scope.get("MESOP_SESSION_ID"),
+        )
+
+        return response
+    except Exception as e:
+        response_time_ms = (time.time() - start_time) * 1000
+        app_logger.error(
+            f"Error processing request {request.method} {request.url.path}: {str(e)}",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+                "response_time_ms": response_time_ms,
+                "request_id": request.scope.get("MESOP_REQUEST_ID"),
+                "user_id": request.scope.get("MESOP_USER_EMAIL"),
+                "session_id": request.scope.get("MESOP_SESSION_ID"),
+            }
+        )
+        raise
 
 
 # Test page routes are left as is, they don't need the scaffold
