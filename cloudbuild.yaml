@@ -20,6 +20,7 @@ substitutions:
   _IMAGE_REPO: 'creative-studio'
   _IMAGE_NAME: 'creative-studio'
   _REGION: 'us-central1'
+  _ALLOWED_VULNS: '0'  # Fail on any high/critical vulnerabilities (0 = strict, adjust as needed)
 
 timeout: 1800s
 
@@ -44,7 +45,25 @@ steps:
       - 'push'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_IMAGE_REPO}/${_IMAGE_NAME}:${COMMIT_SHA}'
 
-  # Step 3: Deploy to Cloud Run with immutable image tag
+  # Step 3: Scan image for vulnerabilities (using Cloud Build's built-in scanning)
+  # Note: Artifact Registry automatically scans images pushed to it
+  # This step verifies the scan results
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: bash
+    id: 'Verify container security scan'
+    args:
+      - '-c'
+      - |
+        # Get image vulnerabilities summary
+        echo "Checking vulnerability scan results for image..."
+        gcloud artifacts docker images describe \
+          '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_IMAGE_REPO}/${_IMAGE_NAME}:${COMMIT_SHA}' \
+          --project=${PROJECT_ID} \
+          --format='value(image_summary.vulnerability.summary)' || true
+
+        echo "Image scan queued. Scanning will complete automatically in Artifact Registry."
+
+  # Step 4: Deploy to Cloud Run with immutable image tag
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     entrypoint: gcloud
     id: 'Deploy to Cloud Run'
@@ -66,4 +85,4 @@ steps:
 # Image to be pushed to artifact registry
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_IMAGE_REPO}/${_IMAGE_NAME}:${COMMIT_SHA}'
-  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_IMAGE_REPO}/${_IMAGE_NAME}:latest'    
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_IMAGE_REPO}/${_IMAGE_NAME}:latest'

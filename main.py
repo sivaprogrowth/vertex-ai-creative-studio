@@ -87,6 +87,16 @@ async def favicon():
     return FileResponse("assets/favicon.ico")
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for container orchestration.
+
+    Used by Docker HEALTHCHECK and Kubernetes liveness probes.
+    Returns 200 OK if the application is running.
+    """
+    return {"status": "healthy"}
+
+
 # Define allowed origins for CORS
 app.add_middleware(
     CORSMiddleware,
